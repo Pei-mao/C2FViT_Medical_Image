@@ -9,6 +9,32 @@ import csv
 import torch.nn.functional as F
 
 
+def reorient_image_to_LIA(image):
+    # Define the target orientation (LIA)
+    target_orientation = ('L', 'I', 'A')
+    
+    # Get the current affine
+    affine = image.affine
+    
+    # Get the current orientation
+    current_orientation = nib.orientations.aff2axcodes(affine)
+    
+    # Determine the transformation to LIA
+    ornt_transform = nib.orientations.ornt_transform(
+        nib.orientations.axcodes2ornt(current_orientation),
+        nib.orientations.axcodes2ornt(target_orientation)
+    )
+    
+    # Apply the orientation transformation
+    reoriented_data = nib.orientations.apply_orientation(image.get_fdata(), ornt_transform)
+    
+    # Calculate the new affine matrix
+    new_affine = nib.orientations.inv_ornt_aff(ornt_transform, reoriented_data.shape)
+    new_affine = affine @ new_affine
+    
+    return nib.Nifti1Image(reoriented_data, new_affine, image.header)
+
+
 def pad_to_shape(img, target_shape):
     """
     Pads the input image with zeros to match the target shape.
@@ -23,6 +49,7 @@ def load_4D(name):
     # X = sitk.GetArrayFromImage(sitk.ReadImage(name, sitk.sitkFloat32 ))
     # X = np.reshape(X, (1,)+ X.shape)
     X = nib.load(name)
+    X = reorient_image_to_LIA(X)
     X = X.get_fdata()
     
     # Ensure the image size is 256x256x256, pad if necessary

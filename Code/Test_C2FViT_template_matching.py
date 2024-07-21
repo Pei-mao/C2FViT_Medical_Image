@@ -9,6 +9,7 @@ import torch.nn.functional as F
 
 from C2FViT_model import C2F_ViT_stage, AffineCOMTransform, Center_of_mass_initial_pairwise
 from Functions import save_img, load_4D, min_max_norm, pad_to_shape
+from tqdm import tqdm
 
 
 if __name__ == '__main__':
@@ -24,8 +25,11 @@ if __name__ == '__main__':
                         dest="fixed", default='../Data/MNI152_T1_1mm_brain_pad_RSP.nii.gz',
                         help="fixed image")
     parser.add_argument("--moving", type=str,
-                        dest="moving", default='../Data/image_A.nii.gz',
+                        dest="moving", default=None,
                         help="moving image")
+    parser.add_argument("--folder", type=str,
+                        dest="folder", default=None,
+                        help="folder containing moving images")
     parser.add_argument("--com_initial", type=bool,
                         dest="com_initial", default=True,
                         help="True: Enable Center of Mass initialization, False: Disable")
@@ -34,6 +38,7 @@ if __name__ == '__main__':
     savepath = opt.savepath
     fixed_path = opt.fixed
     moving_path = opt.moving
+    folder_path = opt.folder
     com_initial = opt.com_initial
     if not os.path.isdir(savepath):
         os.mkdir(savepath)
@@ -55,8 +60,6 @@ if __name__ == '__main__':
     init_center = Center_of_mass_initial_pairwise()
 
     fixed_base = os.path.basename(fixed_path)
-    moving_base = os.path.basename(moving_path)
-
     fixed_img_nii = nib.load(fixed_path)
     header, affine = fixed_img_nii.header, fixed_img_nii.affine
     fixed_img = fixed_img_nii.get_fdata()
@@ -72,24 +75,34 @@ if __name__ == '__main__':
     if fixed_base == "MNI152_T1_1mm_brain_pad_RSP.nii.gz":
         fixed_img = np.clip(fixed_img, a_min=2500, a_max=np.max(fixed_img))
 
-    moving_img = load_4D(moving_path)
-
     fixed_img = min_max_norm(fixed_img)
-    moving_img = min_max_norm(moving_img)
     fixed_img = torch.from_numpy(fixed_img).float().to(device).unsqueeze(dim=0)
-    moving_img = torch.from_numpy(moving_img).float().to(device).unsqueeze(dim=0)
 
-    with torch.no_grad():
-        if com_initial:
-            moving_img, init_flow = init_center(moving_img, fixed_img)
-
-        X_down = F.interpolate(moving_img, scale_factor=0.5, mode="trilinear", align_corners=True)
-        Y_down = F.interpolate(fixed_img, scale_factor=0.5, mode="trilinear", align_corners=True)
-
-        warpped_x_list, y_list, affine_para_list = model(X_down, Y_down)
-        X_Y, affine_matrix = affine_transform(moving_img, affine_para_list[-1])
-
-        X_Y_cpu = X_Y.data.cpu().numpy()[0, 0, :, :, :]
-        save_img(X_Y_cpu, f"{savepath}/warped_{moving_base}", header=header, affine=affine)
-
+    def process_moving_image(moving_img_path):
+        moving_base = os.path.basename(moving_img_path)
+        moving_img = load_4D(moving_img_path)
+         
+        moving_img = min_max_norm(moving_img)
+        moving_img = torch.from_numpy(moving_img).float().to(device).unsqueeze(dim=0)
+        
+        with torch.no_grad():
+            if com_initial:
+                moving_img, init_flow = init_center(moving_img, fixed_img)
+    
+            X_down = F.interpolate(moving_img, scale_factor=0.5, mode="trilinear", align_corners=True)
+            Y_down = F.interpolate(fixed_img, scale_factor=0.5, mode="trilinear", align_corners=True)
+    
+            warpped_x_list, y_list, affine_para_list = model(X_down, Y_down)
+            X_Y, affine_matrix = affine_transform(moving_img, affine_para_list[-1])
+    
+            X_Y_cpu = X_Y.data.cpu().numpy()[0, 0, :, :, :]
+            save_img(X_Y_cpu, f"{savepath}/warped_{moving_base}", header=header, affine=affine)
+            
+    if folder_path:
+        files = [f for f in os.listdir(folder_path) if f.endswith('.nii.gz')]
+        for file_name in tqdm(files, desc="Processing images"):
+            process_moving_image(os.path.join(folder_path, file_name))
+    else:
+        process_moving_image(moving_path)
+        
     print("Result saved to :", savepath)
