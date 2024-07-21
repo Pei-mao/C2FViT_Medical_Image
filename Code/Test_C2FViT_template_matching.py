@@ -8,7 +8,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from C2FViT_model import C2F_ViT_stage, AffineCOMTransform, Center_of_mass_initial_pairwise
-from Functions import save_img, load_4D, min_max_norm, pad_to_shape
+from Functions import save_img, load_4D, min_max_norm, pad_to_shape, crop_image, update_affine, reorient_image
 from tqdm import tqdm
 
 
@@ -33,6 +33,10 @@ if __name__ == '__main__':
     parser.add_argument("--com_initial", type=bool,
                         dest="com_initial", default=True,
                         help="True: Enable Center of Mass initialization, False: Disable")
+    parser.add_argument("--crop", action='store_true', 
+                        help="Crop the output images to 160*224*192")
+    parser.add_argument("--RAS", action='store_true', 
+                        help="Convert the output image into RAS coordinates")
     opt = parser.parse_args()
 
     savepath = opt.savepath
@@ -40,6 +44,9 @@ if __name__ == '__main__':
     moving_path = opt.moving
     folder_path = opt.folder
     com_initial = opt.com_initial
+    crop = opt.crop
+    RAS = opt.RAS
+    
     if not os.path.isdir(savepath):
         os.mkdir(savepath)
 
@@ -61,7 +68,7 @@ if __name__ == '__main__':
 
     fixed_base = os.path.basename(fixed_path)
     fixed_img_nii = nib.load(fixed_path)
-    header, affine = fixed_img_nii.header, fixed_img_nii.affine
+    fixed_header, fixed_affine = fixed_img_nii.header, fixed_img_nii.affine
     fixed_img = fixed_img_nii.get_fdata()
     
     # Ensure the image size is 256x256x256, pad if necessary
@@ -78,7 +85,7 @@ if __name__ == '__main__':
     fixed_img = min_max_norm(fixed_img)
     fixed_img = torch.from_numpy(fixed_img).float().to(device).unsqueeze(dim=0)
 
-    def process_moving_image(moving_img_path):
+    def process_moving_image(moving_img_path, header, affine):
         moving_base = os.path.basename(moving_img_path)
         moving_img = load_4D(moving_img_path)
          
@@ -94,15 +101,24 @@ if __name__ == '__main__':
     
             warpped_x_list, y_list, affine_para_list = model(X_down, Y_down)
             X_Y, affine_matrix = affine_transform(moving_img, affine_para_list[-1])
-    
+            
             X_Y_cpu = X_Y.data.cpu().numpy()[0, 0, :, :, :]
+            
+            if RAS:
+                X_Y_cpu_nii = nib.nifti1.Nifti1Image(X_Y_cpu, affine, header=header)
+                X_Y_cpu_nii = reorient_image(X_Y_cpu_nii, ('R', 'A', 'S'))
+                header, affine = X_Y_cpu_nii.header, X_Y_cpu_nii.affine
+                X_Y_cpu = X_Y_cpu_nii.get_fdata()
+            if crop:
+                X_Y_cpu, crop_slices = crop_image(X_Y_cpu, target_shape=(160, 224, 192))
+                affine = update_affine(affine, crop_slices)
             save_img(X_Y_cpu, f"{savepath}/warped_{moving_base}", header=header, affine=affine)
             
     if folder_path:
         files = [f for f in os.listdir(folder_path) if f.endswith('.nii.gz')]
         for file_name in tqdm(files, desc="Processing images"):
-            process_moving_image(os.path.join(folder_path, file_name))
+            process_moving_image(os.path.join(folder_path, file_name), fixed_header, fixed_affine)
     else:
-        process_moving_image(moving_path)
+        process_moving_image(moving_path, fixed_header, fixed_affine)
         
     print("Result saved to :", savepath)

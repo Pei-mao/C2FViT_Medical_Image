@@ -9,10 +9,29 @@ import csv
 import torch.nn.functional as F
 
 
-def reorient_image_to_LIA(image):
-    # Define the target orientation (LIA)
-    target_orientation = ('L', 'I', 'A')
-    
+def update_affine(original_affine, crop_slices):
+    """Updates the affine matrix after cropping."""
+    translation = [slice.start for slice in crop_slices]
+    new_affine = original_affine.copy()
+    new_affine[:3, 3] = original_affine[:3, 3] + np.dot(original_affine[:3, :3], translation)
+    return new_affine
+
+
+def crop_image(image, target_shape):
+    """Crops the image to the target shape."""
+    current_shape = image.shape
+    crop_slices = []
+
+    for i in range(len(target_shape)):
+        start = (current_shape[i] - target_shape[i]) // 2
+        end = start + target_shape[i]
+        crop_slices.append(slice(start, end))
+
+    cropped_image = image[tuple(crop_slices)]
+    return cropped_image, crop_slices
+
+
+def reorient_image(image, target_orientation):    
     # Get the current affine
     affine = image.affine
     
@@ -49,7 +68,7 @@ def load_4D(name):
     # X = sitk.GetArrayFromImage(sitk.ReadImage(name, sitk.sitkFloat32 ))
     # X = np.reshape(X, (1,)+ X.shape)
     X = nib.load(name)
-    X = reorient_image_to_LIA(X)
+    X = reorient_image(X, ('L', 'I', 'A'))
     X = X.get_fdata()
     
     # Ensure the image size is 256x256x256, pad if necessary
