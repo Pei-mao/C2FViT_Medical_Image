@@ -9,11 +9,26 @@ import csv
 import torch.nn.functional as F
 
 
+def pad_to_shape(img, target_shape):
+    """
+    Pads the input image with zeros to match the target shape.
+    """
+    padding = [(max(0, t - s)) for s, t in zip(img.shape, target_shape)]
+    pad_width = [(p // 2, p - (p // 2)) for p in padding]
+    padded_img = np.pad(img, pad_width, mode='constant', constant_values=0)
+    return padded_img
+
+
 def load_4D(name):
     # X = sitk.GetArrayFromImage(sitk.ReadImage(name, sitk.sitkFloat32 ))
     # X = np.reshape(X, (1,)+ X.shape)
     X = nib.load(name)
     X = X.get_fdata()
+    
+    # Ensure the image size is 256x256x256, pad if necessary
+    target_shape = (256, 256, 256)
+    if X.shape != target_shape:
+        X = pad_to_shape(X, target_shape)
     X = np.reshape(X, (1,) + X.shape)
     return X
 

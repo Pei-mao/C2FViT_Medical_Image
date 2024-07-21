@@ -8,7 +8,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from C2FViT_model import C2F_ViT_stage, AffineCOMTransform, Center_of_mass_initial_pairwise
-from Functions import save_img, load_4D, min_max_norm
+from Functions import save_img, load_4D, min_max_norm, pad_to_shape
 
 
 if __name__ == '__main__':
@@ -60,6 +60,12 @@ if __name__ == '__main__':
     fixed_img_nii = nib.load(fixed_path)
     header, affine = fixed_img_nii.header, fixed_img_nii.affine
     fixed_img = fixed_img_nii.get_fdata()
+    
+    # Ensure the image size is 256x256x256, pad if necessary
+    target_shape = (256, 256, 256)
+    if fixed_img.shape != target_shape:
+        fixed_img = pad_to_shape(fixed_img, target_shape)
+        
     fixed_img = np.reshape(fixed_img, (1,) + fixed_img.shape)
 
     # If fixed img is MNI152 altas, do windowing (contrast stretching)
