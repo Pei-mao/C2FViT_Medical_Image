@@ -108,7 +108,10 @@ if __name__ == '__main__':
             X_Y_cpu = X_Y.data.cpu().numpy()[0, 0, :, :, :]
             
             if Eval:
-                moving_seg = load_4D(moving_img_path.replace("ABIDE_NoAffine", "ABIDE_aseg").replace("_tbet.nii.gz", "_aseg.nii.gz"))
+                #ABIDE_50
+                #moving_seg = load_4D(moving_img_path.replace("ABIDE_NoAffine", "ABIDE_aseg").replace("_tbet.nii.gz", "_aseg.nii.gz"))
+                #CC359_60
+                moving_seg = load_4D(moving_img_path.replace("CC359_60", "CC359_60_aseg").replace(".nii.gz", "_aseg.nii.gz"))
                 moving_seg = torch.from_numpy(moving_seg).float().to(device).unsqueeze(dim=0)
                 moving_seg = F.grid_sample(moving_seg, init_flow, mode="nearest", align_corners=True)
                 F_X_Y = F.affine_grid(affine_matrix, moving_seg.shape, align_corners=True)

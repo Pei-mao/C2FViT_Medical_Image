@@ -75,6 +75,8 @@ def load_4D(name):
     target_shape = (256, 256, 256)
     if X.shape != target_shape:
         X = pad_to_shape(X, target_shape)
+        X, _ = crop_image(X, target_shape=(256, 256, 256))
+    
     X = np.reshape(X, (1,) + X.shape)
     return X
 
