@@ -39,6 +39,8 @@ if __name__ == '__main__':
                         help="Convert the output image into RAS coordinates")
     parser.add_argument("--Eval", action='store_true', 
                         help="Used later to evaluate the results")
+    parser.add_argument("--VBM", action='store_true', 
+                        help="Perform VBM analysis")
     opt = parser.parse_args()
 
     savepath = opt.savepath
@@ -49,6 +51,7 @@ if __name__ == '__main__':
     crop = opt.crop
     RAS = opt.RAS
     eval_flag = opt.Eval
+    VBM = opt.VBM
     
     if not os.path.isdir(savepath):
         os.mkdir(savepath)
@@ -111,11 +114,17 @@ if __name__ == '__main__':
                 #ABIDE_50
                 #moving_seg = load_4D(moving_img_path.replace("ABIDE_NoAffine", "ABIDE_aseg").replace("_tbet.nii.gz", "_aseg.nii.gz"))
                 #CC359_60
-                moving_seg = load_4D(moving_img_path.replace("CC359_60", "CC359_60_aseg").replace(".nii.gz", "_aseg.nii.gz"))
+                #moving_seg = load_4D(moving_img_path.replace("CC359_60", "CC359_60_aseg").replace(".nii.gz", "_aseg.nii.gz"))
+                #VBM
+                moving_seg = load_4D(moving_img_path.replace("raw", "aseg").replace("_tbet.nii.gz", "_aseg.nii.gz"))
+                
                 moving_seg = torch.from_numpy(moving_seg).float().to(device).unsqueeze(dim=0)
-                moving_seg = F.grid_sample(moving_seg, init_flow, mode="nearest", align_corners=True)
+                
+                mode = "bilinear" if VBM else "nearest"
+
+                moving_seg = F.grid_sample(moving_seg, init_flow, mode=mode, align_corners=True)
                 F_X_Y = F.affine_grid(affine_matrix, moving_seg.shape, align_corners=True)
-                moving_seg = F.grid_sample(moving_seg, F_X_Y, mode="nearest", align_corners=True).cpu().numpy()[0, 0, :, :, :]
+                moving_seg = F.grid_sample(moving_seg, F_X_Y, mode=mode, align_corners=True).cpu().numpy()[0, 0, :, :, :]
                 
             if RAS:
                 X_Y_cpu_nii = nib.nifti1.Nifti1Image(X_Y_cpu, affine, header=header)
