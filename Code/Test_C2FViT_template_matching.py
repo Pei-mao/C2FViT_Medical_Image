@@ -37,6 +37,8 @@ if __name__ == '__main__':
                         help="Crop the output images to 160*224*192")
     parser.add_argument("--RAS", action='store_true', 
                         help="Convert the output image into RAS coordinates")
+    parser.add_argument("--Eval", action='store_true', 
+                        help="Used later to evaluate the results")
     opt = parser.parse_args()
 
     savepath = opt.savepath
@@ -46,6 +48,7 @@ if __name__ == '__main__':
     com_initial = opt.com_initial
     crop = opt.crop
     RAS = opt.RAS
+    eval_flag = opt.Eval
     
     if not os.path.isdir(savepath):
         os.mkdir(savepath)
@@ -85,13 +88,13 @@ if __name__ == '__main__':
     fixed_img = min_max_norm(fixed_img)
     fixed_img = torch.from_numpy(fixed_img).float().to(device).unsqueeze(dim=0)
 
-    def process_moving_image(moving_img_path, header, affine):
+    def process_moving_image(moving_img_path, header, affine, Eval=False):
         moving_base = os.path.basename(moving_img_path)
         moving_img = load_4D(moving_img_path)
          
         moving_img = min_max_norm(moving_img)
         moving_img = torch.from_numpy(moving_img).float().to(device).unsqueeze(dim=0)
-        
+
         with torch.no_grad():
             if com_initial:
                 moving_img, init_flow = init_center(moving_img, fixed_img)
@@ -104,21 +107,42 @@ if __name__ == '__main__':
             
             X_Y_cpu = X_Y.data.cpu().numpy()[0, 0, :, :, :]
             
+            if Eval:
+                moving_seg = load_4D(moving_img_path.replace("ABIDE_NoAffine", "ABIDE_aseg").replace("_tbet.nii.gz", "_aseg.nii.gz"))
+                moving_seg = torch.from_numpy(moving_seg).float().to(device).unsqueeze(dim=0)
+                moving_seg = F.grid_sample(moving_seg, init_flow, mode="nearest", align_corners=True)
+                F_X_Y = F.affine_grid(affine_matrix, moving_seg.shape, align_corners=True)
+                moving_seg = F.grid_sample(moving_seg, F_X_Y, mode="nearest", align_corners=True).cpu().numpy()[0, 0, :, :, :]
+                
             if RAS:
                 X_Y_cpu_nii = nib.nifti1.Nifti1Image(X_Y_cpu, affine, header=header)
                 X_Y_cpu_nii = reorient_image(X_Y_cpu_nii, ('R', 'A', 'S'))
+                
+                if Eval:
+                    moving_seg_nii = nib.nifti1.Nifti1Image(moving_seg, affine, header=header)
+                    moving_seg_nii = reorient_image(moving_seg_nii, ('R', 'A', 'S'))
+                    moving_seg = moving_seg_nii.get_fdata()
+                    
                 header, affine = X_Y_cpu_nii.header, X_Y_cpu_nii.affine
                 X_Y_cpu = X_Y_cpu_nii.get_fdata()
+                
             if crop:
                 X_Y_cpu, crop_slices = crop_image(X_Y_cpu, target_shape=(160, 224, 192))
                 affine = update_affine(affine, crop_slices)
-            save_img(X_Y_cpu, f"{savepath}/warped_{moving_base}", header=header, affine=affine)
+                
+                if Eval:
+                    moving_seg, crop_slices = crop_image(moving_seg, target_shape=(160, 224, 192))
+                    
+            save_img(X_Y_cpu, f"{savepath}/{moving_base}", header=header, affine=affine)
+            if Eval:
+                moving_base = moving_base.replace(".nii.gz", "_aseg.nii.gz")
+                save_img(moving_seg, f"{savepath}/{moving_base}", header=header, affine=affine)    
             
     if folder_path:
         files = [f for f in os.listdir(folder_path) if f.endswith('.nii.gz')]
         for file_name in tqdm(files, desc="Processing images"):
-            process_moving_image(os.path.join(folder_path, file_name), fixed_header, fixed_affine)
+            process_moving_image(os.path.join(folder_path, file_name), fixed_header, fixed_affine, eval_flag)
     else:
-        process_moving_image(moving_path, fixed_header, fixed_affine)
+        process_moving_image(moving_path, fixed_header, fixed_affine, eval_flag)
         
     print("Result saved to :", savepath)
