@@ -112,11 +112,11 @@ if __name__ == '__main__':
             
             if Eval:
                 #ABIDE_50
-                moving_seg = load_4D(moving_img_path.replace("ABIDE_NoAffine", "ABIDE_aseg").replace("_tbet.nii.gz", "_aseg.nii.gz"))
+                #moving_seg = load_4D(moving_img_path.replace("ABIDE_NoAffine", "ABIDE_aseg").replace("_tbet.nii.gz", "_aseg.nii.gz"))
                 #CC359_60
                 #moving_seg = load_4D(moving_img_path.replace("CC359_60", "CC359_60_aseg").replace(".nii.gz", "_aseg.nii.gz"))
                 #VBM
-                #moving_seg = load_4D(moving_img_path.replace("raw", "aseg").replace("_tbet.nii.gz", "_aseg.nii.gz"))
+                moving_seg = load_4D(moving_img_path.replace("raw", "GM").replace(".nii.gz", "_cgw_pve1.nii.gz"))
                 
                 moving_seg = torch.from_numpy(moving_seg).float().to(device).unsqueeze(dim=0)
                 
@@ -147,8 +147,15 @@ if __name__ == '__main__':
                     
             save_img(X_Y_cpu, f"{savepath}/{moving_base}", header=header, affine=affine)
             if Eval:
-                moving_base = moving_base.replace(".nii.gz", "_aseg.nii.gz")
-                save_img(moving_seg, f"{savepath}/{moving_base}", header=header, affine=affine)    
+                if VBM:
+                    if not os.path.isdir(savepath + "/GM"):
+                        os.mkdir(savepath + "/GM")
+                        
+                    moving_base = moving_base.replace(".nii.gz", "_cgw_pve1.nii.gz")
+                    save_img(moving_seg, f"{savepath}/GM/{moving_base}", header=header, affine=affine)
+                else:
+                    moving_base = moving_base.replace(".nii.gz", "_aseg.nii.gz")
+                    save_img(moving_seg, f"{savepath}/{moving_base}", header=header, affine=affine)    
             
     if folder_path:
         files = [f for f in os.listdir(folder_path) if f.endswith('.nii.gz')]
