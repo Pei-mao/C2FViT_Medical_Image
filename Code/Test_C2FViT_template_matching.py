@@ -112,11 +112,11 @@ if __name__ == '__main__':
             
             if Eval:
                 #ABIDE_50
-                #moving_seg = load_4D(moving_img_path.replace("ABIDE_NoAffine", "ABIDE_aseg").replace("_tbet.nii.gz", "_aseg.nii.gz"))
+                moving_seg = load_4D(moving_img_path.replace("ABIDE_NoAffine", "ABIDE_aseg").replace("_tbet.nii.gz", "_aseg.nii.gz"))
                 #CC359_60
                 #moving_seg = load_4D(moving_img_path.replace("CC359_60", "CC359_60_aseg").replace(".nii.gz", "_aseg.nii.gz"))
                 #VBM
-                moving_seg = load_4D(moving_img_path.replace("raw", "GM").replace(".nii.gz", "_cgw_pve1.nii.gz"))
+                #moving_seg = load_4D(moving_img_path.replace("raw", "GM").replace(".nii.gz", "_cgw_pve1.nii.gz"))
                 
                 moving_seg = torch.from_numpy(moving_seg).float().to(device).unsqueeze(dim=0)
                 
