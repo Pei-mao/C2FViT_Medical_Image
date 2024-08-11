@@ -35,12 +35,14 @@ if __name__ == '__main__':
                         help="True: Enable Center of Mass initialization, False: Disable")
     parser.add_argument("--crop", action='store_true', 
                         help="Crop the output images to 160*224*192")
-    parser.add_argument("--RAS", action='store_true', 
+    parser.add_argument("--output_RAS", action='store_true', 
                         help="Convert the output image into RAS coordinates")
     parser.add_argument("--Eval", action='store_true', 
                         help="Used later to evaluate the results")
     parser.add_argument("--VBM", action='store_true', 
                         help="Perform VBM analysis")
+    parser.add_argument("--RAS", action='store_true', 
+                        help="True: The image is in RAS coordinates during testing, False: LIA coordinates")    
     opt = parser.parse_args()
 
     savepath = opt.savepath
@@ -49,9 +51,10 @@ if __name__ == '__main__':
     folder_path = opt.folder
     com_initial = opt.com_initial
     crop = opt.crop
-    RAS = opt.RAS
+    output_RAS = opt.output_RAS
     eval_flag = opt.Eval
     VBM = opt.VBM
+    RAS = opt.RAS
     
     if not os.path.isdir(savepath):
         os.mkdir(savepath)
@@ -85,7 +88,7 @@ if __name__ == '__main__':
     fixed_img = np.reshape(fixed_img, (1,) + fixed_img.shape)
 
     # If fixed img is MNI152 altas, do windowing (contrast stretching)
-    if fixed_base == "MNI152_T1_1mm_brain_pad_RSP.nii.gz":
+    if fixed_base == "MNI152_T1_1mm_brain_pad_RSP.nii.gz" or fixed_base == "MNI152_T1_1mm_brain_pad_RSP_RAS.nii.gz":
         fixed_img = np.clip(fixed_img, a_min=2500, a_max=np.max(fixed_img))
 
     fixed_img = min_max_norm(fixed_img)
@@ -93,7 +96,7 @@ if __name__ == '__main__':
 
     def process_moving_image(moving_img_path, header, affine, Eval=False):
         moving_base = os.path.basename(moving_img_path)
-        moving_img = load_4D(moving_img_path)
+        moving_img = load_4D(moving_img_path, RAS)
          
         moving_img = min_max_norm(moving_img)
         moving_img = torch.from_numpy(moving_img).float().to(device).unsqueeze(dim=0)
@@ -112,11 +115,11 @@ if __name__ == '__main__':
             
             if Eval:
                 #ABIDE_50
-                moving_seg = load_4D(moving_img_path.replace("ABIDE_NoAffine", "ABIDE_aseg").replace("_tbet.nii.gz", "_aseg.nii.gz"))
+                moving_seg = load_4D(moving_img_path.replace("ABIDE_NoAffine", "ABIDE_aseg").replace("_tbet.nii.gz", "_aseg.nii.gz"), RAS)
                 #CC359_60
-                #moving_seg = load_4D(moving_img_path.replace("CC359_60", "CC359_60_aseg").replace(".nii.gz", "_aseg.nii.gz"))
+                #moving_seg = load_4D(moving_img_path.replace("CC359_60", "CC359_60_aseg").replace(".nii.gz", "_aseg.nii.gz"), RAS)
                 #VBM
-                #moving_seg = load_4D(moving_img_path.replace("raw", "GM").replace(".nii.gz", "_cgw_pve1.nii.gz"))
+                #moving_seg = load_4D(moving_img_path.replace("raw", "GM").replace(".nii.gz", "_cgw_pve1.nii.gz"), RAS)
                 
                 moving_seg = torch.from_numpy(moving_seg).float().to(device).unsqueeze(dim=0)
                 
@@ -126,7 +129,7 @@ if __name__ == '__main__':
                 F_X_Y = F.affine_grid(affine_matrix, moving_seg.shape, align_corners=True)
                 moving_seg = F.grid_sample(moving_seg, F_X_Y, mode=mode, align_corners=True).cpu().numpy()[0, 0, :, :, :]
                 
-            if RAS:
+            if output_RAS:
                 X_Y_cpu_nii = nib.nifti1.Nifti1Image(X_Y_cpu, affine, header=header)
                 X_Y_cpu_nii = reorient_image(X_Y_cpu_nii, ('R', 'A', 'S'))
                 
