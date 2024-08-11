@@ -57,9 +57,13 @@ def train():
     imgs = sorted(glob.glob(datapath + "/tigerdata_raw_train/*.nii.gz"))
     labels = sorted(glob.glob(datapath + "/tigerdata_raw_train_aseg/*.nii.gz"))
     
-    MNI152_img = "../Data/MNI152_T1_1mm_brain_pad_RSP.nii.gz"
-    #MNI152_label = "../Data/MNI-maxprob-thr50-1mm_pad_RSP_oasis.nii.gz"
-    MNI152_label = "../Data/MNI152_T1_1mm_brain_pad_RSP_aseg.nii.gz"
+    if RAS:
+        MNI152_img = "../Data/MNI152_T1_1mm_brain_pad_RSP_RAS.nii.gz"
+        MNI152_label = "../Data/MNI152_T1_1mm_brain_pad_RSP_RAS_aseg.nii.gz"
+    else:    
+        MNI152_img = "../Data/MNI152_T1_1mm_brain_pad_RSP.nii.gz"
+        #MNI152_label = "../Data/MNI-maxprob-thr50-1mm_pad_RSP_oasis.nii.gz"
+        MNI152_label = "../Data/MNI152_T1_1mm_brain_pad_RSP_aseg.nii.gz"
 
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     # optimizer = torch.optim.SGD(model.parameters(), lr=lr, momentum=0.9)
@@ -70,7 +74,7 @@ def train():
 
     lossall = np.zeros((2, iteration + 1))
 
-    training_generator = Data.DataLoader(Dataset_epoch_MNI152(imgs, labels, MNI152_img, MNI152_label, need_label=False),
+    training_generator = Data.DataLoader(Dataset_epoch_MNI152(imgs, labels, MNI152_img, MNI152_label, need_label=False, RAS=True),
                                          batch_size=1,
                                          shuffle=True, num_workers=4)
     step = 0
@@ -129,11 +133,15 @@ def train():
                 imgs = sorted(glob.glob(datapath + "/tigerdata_raw_val/*.nii.gz"))
                 labels = sorted(glob.glob(datapath + "/tigerdata_raw_val_aseg/*.nii.gz"))
                 
-                MNI152_img = "../Data/MNI152_T1_1mm_brain_pad_RSP.nii.gz"
-                #MNI152_label = "../Data/MNI-maxprob-thr50-1mm_pad_RSP_oasis.nii.gz"
-                MNI152_label = "../Data/MNI152_T1_1mm_brain_pad_RSP_aseg.nii.gz"
+                if RAS:
+                    MNI152_img = "../Data/MNI152_T1_1mm_brain_pad_RSP_RAS.nii.gz"
+                    MNI152_label = "../Data/MNI152_T1_1mm_brain_pad_RSP_RAS_aseg.nii.gz"
+                else:
+                    MNI152_img = "../Data/MNI152_T1_1mm_brain_pad_RSP.nii.gz"
+                    #MNI152_label = "../Data/MNI-maxprob-thr50-1mm_pad_RSP_oasis.nii.gz"
+                    MNI152_label = "../Data/MNI152_T1_1mm_brain_pad_RSP_aseg.nii.gz"
                 
-                valid_generator = Data.DataLoader(Dataset_epoch_MNI152(imgs, labels, MNI152_img, MNI152_label, need_label=True),
+                valid_generator = Data.DataLoader(Dataset_epoch_MNI152(imgs, labels, MNI152_img, MNI152_label, need_label=True, RAS=True),
                                                   batch_size=1,
                                                   shuffle=False, num_workers=2)
                 
@@ -207,6 +215,8 @@ if __name__ == '__main__':
     parser.add_argument("--com_initial", type=bool,
                         dest="com_initial", default=True,
                         help="True: Enable Center of Mass initialization, False: Disable")
+    parser.add_argument("--RAS", action='store_true',
+                        help="True: The image is in RAS coordinates during training, False: LIA coordinates")
     opt = parser.parse_args()
 
     lr = opt.lr
@@ -214,6 +224,7 @@ if __name__ == '__main__':
     n_checkpoint = opt.checkpoint
     datapath = opt.datapath
     com_initial = opt.com_initial
+    RAS = opt.RAS
 
     model_name = opt.modelname
 

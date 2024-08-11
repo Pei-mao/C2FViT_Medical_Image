@@ -64,11 +64,14 @@ def pad_to_shape(img, target_shape):
     return padded_img
 
 
-def load_4D(name):
+def load_4D(name, RAS=False):
     # X = sitk.GetArrayFromImage(sitk.ReadImage(name, sitk.sitkFloat32 ))
     # X = np.reshape(X, (1,)+ X.shape)
     X = nib.load(name)
-    X = reorient_image(X, ('L', 'I', 'A'))
+    if RAS:
+        X = reorient_image(X, ('R', 'A', 'S'))
+    else:
+        X = reorient_image(X, ('L', 'I', 'A'))
     X = X.get_fdata()
     
     # Ensure the image size is 256x256x256, pad if necessary
@@ -154,7 +157,7 @@ class Dataset_epoch(Data.Dataset):
 class Dataset_epoch_MNI152(Data.Dataset):
     'Characterizes a dataset for PyTorch'
 
-    def __init__(self, img_list, label_list, fixed_img, fixed_label, need_label=True):
+    def __init__(self, img_list, label_list, fixed_img, fixed_label, need_label=True, RAS=True):
         'Initialization'
         super(Dataset_epoch_MNI152, self).__init__()
         # self.exp_path = exp_path
@@ -163,6 +166,7 @@ class Dataset_epoch_MNI152(Data.Dataset):
         self.need_label = need_label
         self.fixed_img = fixed_img
         self.fixed_label = fixed_label
+        self.RAS = True
 
     def __len__(self):
         'Denotes the total number of samples'
@@ -171,15 +175,15 @@ class Dataset_epoch_MNI152(Data.Dataset):
     def __getitem__(self, step):
         'Generates one sample of data'
         # Select sample
-        moving_img = load_4D(self.img_pair[step])
-        fixed_img = load_4D(self.fixed_img)
+        moving_img = load_4D(self.img_pair[step], self.RAS)
+        fixed_img = load_4D(self.fixed_img, self.RAS)
         fixed_img = np.clip(fixed_img, a_min=2500, a_max=np.max(fixed_img))
 
         if self.need_label:
-            moving_label = load_4D(self.label_pair[step])
-            fixed_label = load_4D(self.fixed_label)
+            moving_label = load_4D(self.label_pair[step], self.RAS)
+            fixed_label = load_4D(self.fixed_label, self.RAS)
             return torch.from_numpy(min_max_norm(moving_img)).float(), torch.from_numpy(
-                min_max_norm(fixed_img)).float(), torch.from_numpy(moving_label).float(), torch.from_numpy(fixed_label).float()
+                min_max_norm(fixed_img)).float(), torch.from_numpy(moving_label.copy()).float(), torch.from_numpy(fixed_label.copy()).float()
         else:
             return torch.from_numpy(min_max_norm(moving_img)).float(), torch.from_numpy(
                 min_max_norm(fixed_img)).float()
