@@ -109,6 +109,13 @@ if __name__ == '__main__':
             Y_down = F.interpolate(fixed_img, scale_factor=0.5, mode="trilinear", align_corners=True)
     
             warpped_x_list, y_list, affine_para_list = model(X_down, Y_down)
+          #rigid
+            #affine_para_list[-1][0, 11] = 0
+            #affine_para_list[-1][0, 10] = 0
+            #affine_para_list[-1][0, 9] = 0
+            #affine_para_list[-1][0, 8] = 0
+            #affine_para_list[-1][0, 7] = 0
+            #affine_para_list[-1][0, 6] = 0
             X_Y, affine_matrix = affine_transform(moving_img, affine_para_list[-1])
             
             X_Y_cpu = X_Y.data.cpu().numpy()[0, 0, :, :, :]
