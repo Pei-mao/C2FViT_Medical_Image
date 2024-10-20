@@ -613,6 +613,98 @@ class AffineCOMTransform(nn.Module):
         return transformed_x, output_affine_m[0:3].unsqueeze(0)
 
 
+#SPM
+class CustomAffineCOMTransform(nn.Module):
+    def __init__(self, use_com=True):
+        super(CustomAffineCOMTransform, self).__init__()
+
+        self.translation_m = None
+        self.rotation_x = None
+        self.rotation_y = None
+        self.rotation_z = None
+        self.rotation_m = None
+        self.shearing_m = None
+        self.scaling_m = None
+
+        self.id = torch.zeros((1, 3, 4)).cuda()
+        self.id[0, 0, 0] = 1
+        self.id[0, 1, 1] = 1
+        self.id[0, 2, 2] = 1
+
+        self.use_com = use_com
+
+    def forward(self, x, affine_para):
+        # Matrix that register x to its center of mass
+        id_grid = F.affine_grid(self.id, x.shape, align_corners=True)
+
+        to_center_matrix = torch.eye(4).cuda()
+        reversed_to_center_matrix = torch.eye(4).cuda()
+        if self.use_com:
+            x_sum = torch.sum(x)
+            center_mass_x = torch.sum(x.permute(0, 2, 3, 4, 1)[..., 0] * id_grid[..., 0]) / x_sum
+            center_mass_y = torch.sum(x.permute(0, 2, 3, 4, 1)[..., 0] * id_grid[..., 1]) / x_sum
+            center_mass_z = torch.sum(x.permute(0, 2, 3, 4, 1)[..., 0] * id_grid[..., 2]) / x_sum
+
+            to_center_matrix[0, 3] = center_mass_x
+            to_center_matrix[1, 3] = center_mass_y
+            to_center_matrix[2, 3] = center_mass_z
+            reversed_to_center_matrix[0, 3] = -center_mass_x
+            reversed_to_center_matrix[1, 3] = -center_mass_y
+            reversed_to_center_matrix[2, 3] = -center_mass_z
+
+        self.translation_m = torch.eye(4).cuda()
+        self.rotation_x = torch.eye(4).cuda()
+        self.rotation_y = torch.eye(4).cuda()
+        self.rotation_z = torch.eye(4).cuda()
+        self.rotation_m = torch.eye(4).cuda()
+        self.shearing_m = torch.eye(4).cuda()
+        self.scaling_m = torch.eye(4).cuda()
+
+        trans_xyz = affine_para[0, 0:3]
+        rotate_xyz = affine_para[0, 3:6] * math.pi
+        shearing_xyz = affine_para[0, 6:9] * math.pi
+        scaling_xyz = 1 + (affine_para[0, 9:12] * 0.5)
+
+        self.translation_m[0, 3] = trans_xyz[0]
+        self.translation_m[1, 3] = trans_xyz[1]
+        self.translation_m[2, 3] = trans_xyz[2]
+        self.scaling_m[0, 0] = scaling_xyz[0]
+        self.scaling_m[1, 1] = scaling_xyz[1]
+        self.scaling_m[2, 2] = scaling_xyz[2]
+
+        self.rotation_x[1, 1] = torch.cos(rotate_xyz[0])
+        self.rotation_x[1, 2] = -torch.sin(rotate_xyz[0])
+        self.rotation_x[2, 1] = torch.sin(rotate_xyz[0])
+        self.rotation_x[2, 2] = torch.cos(rotate_xyz[0])
+
+        self.rotation_y[0, 0] = torch.cos(rotate_xyz[1])
+        self.rotation_y[0, 2] = torch.sin(rotate_xyz[1])
+        self.rotation_y[2, 0] = -torch.sin(rotate_xyz[1])
+        self.rotation_y[2, 2] = torch.cos(rotate_xyz[1])
+
+        self.rotation_z[0, 0] = torch.cos(rotate_xyz[2])
+        self.rotation_z[0, 1] = -torch.sin(rotate_xyz[2])
+        self.rotation_z[1, 0] = torch.sin(rotate_xyz[2])
+        self.rotation_z[1, 1] = torch.cos(rotate_xyz[2])
+
+        self.rotation_m = torch.mm(torch.mm(self.rotation_z, self.rotation_y), self.rotation_x)
+
+        self.shearing_m[0, 1] = shearing_xyz[0]
+        self.shearing_m[0, 2] = shearing_xyz[1]
+        self.shearing_m[1, 2] = shearing_xyz[2]
+
+        output_affine_m = torch.mm(to_center_matrix, torch.mm(self.shearing_m, torch.mm(self.scaling_m,
+                                                                                        torch.mm(self.rotation_m,
+                                                                                                 torch.mm(
+                                                                                                     reversed_to_center_matrix,
+                                                                                                     self.translation_m)))))
+        grid = F.affine_grid(output_affine_m[0:3].unsqueeze(0), x.shape, align_corners=True)
+        transformed_x = custom_grid_sample(x, grid, align_corners=True)
+        #transformed_x = F.grid_sample(x, grid, mode='bilinear', align_corners=True)
+
+        return transformed_x, output_affine_m[0:3].unsqueeze(0)
+    
+    
 class DirectAffineTransform(nn.Module):
     def __init__(self):
         super(DirectAffineTransform, self).__init__()
@@ -665,6 +757,162 @@ class Center_of_mass_initial_pairwise(nn.Module):
 
         grid = F.affine_grid(self.to_center_matrix, x.shape, align_corners=True)
         transformed_image = F.grid_sample(x, grid, align_corners=True)
+
+        # print(affine_para)
+        # print(output_affine_m[0:3])
+
+        return transformed_image, grid
+    
+    
+#SPM
+def custom_grid_sample(im, grid, align_corners=False):
+    n, c, d, h, w = im.shape
+
+    gn, gd, gh, gw, _ = grid.shape
+
+    assert n == gn
+
+    x = grid[:, :, :, :, 0]
+    y = grid[:, :, :, :, 1]
+    z = grid[:, :, :, :, 2]
+
+    if align_corners:
+        x = ((x + 1) / 2) * (w - 1)
+        y = ((y + 1) / 2) * (h - 1)
+        z = ((z + 1) / 2) * (d - 1)
+    else:
+        x = ((x + 1) * w - 1) / 2
+        y = ((y + 1) * h - 1) / 2
+        z = ((z + 1) * d - 1) / 2
+
+    x = x.view(n, -1)
+    y = y.view(n, -1)
+    z = z.view(n, -1)
+
+    x0 = torch.floor(x).long()
+    y0 = torch.floor(y).long()
+    z0 = torch.floor(z).long()
+    x1 = x0 + 1
+    y1 = y0 + 1
+    z1 = z0 + 1
+
+    wa = ((x1 - x) * (y1 - y) * (z1 - z)).unsqueeze(1)
+    wb = ((x1 - x) * (y - y0) * (z1 - z)).unsqueeze(1)
+    wc = ((x - x0) * (y1 - y) * (z1 - z)).unsqueeze(1)
+    wd = ((x - x0) * (y - y0) * (z1 - z)).unsqueeze(1)
+    we = ((x1 - x) * (y1 - y) * (z - z0)).unsqueeze(1)
+    wf = ((x1 - x) * (y - y0) * (z - z0)).unsqueeze(1)
+    wg = ((x - x0) * (y1 - y) * (z - z0)).unsqueeze(1)
+    wh = ((x - x0) * (y - y0) * (z - z0)).unsqueeze(1)
+
+    # Apply default for grid_sample function zero padding
+    im_padded = F.pad(im, pad=[1, 1, 1, 1, 1, 1], mode='constant')
+    padded_d = d + 2
+    padded_h = h + 2
+    padded_w = w + 2
+    # save points positions after padding
+    x0, x1, y0, y1, z0, z1 = x0 + 1, x1 + 1, y0 + 1, y1 + 1, z0 + 1, z1 + 1
+
+    # Clip coordinates to padded image size
+    device = im.device
+    x0 = torch.clamp(x0, 0, padded_w - 1)
+    x1 = torch.clamp(x1, 0, padded_w - 1)
+    y0 = torch.clamp(y0, 0, padded_h - 1)
+    y1 = torch.clamp(y1, 0, padded_h - 1)
+    z0 = torch.clamp(z0, 0, padded_d - 1)
+    z1 = torch.clamp(z1, 0, padded_d - 1)
+
+    im_padded = im_padded.view(n, c, -1)
+
+    x0_y0_z0 = (x0 + y0 * padded_w + z0 * padded_w * padded_h).unsqueeze(1).expand(-1, c, -1)
+    x0_y1_z0 = (x0 + y1 * padded_w + z0 * padded_w * padded_h).unsqueeze(1).expand(-1, c, -1)
+    x1_y0_z0 = (x1 + y0 * padded_w + z0 * padded_w * padded_h).unsqueeze(1).expand(-1, c, -1)
+    x1_y1_z0 = (x1 + y1 * padded_w + z0 * padded_w * padded_h).unsqueeze(1).expand(-1, c, -1)
+    x0_y0_z1 = (x0 + y0 * padded_w + z1 * padded_w * padded_h).unsqueeze(1).expand(-1, c, -1)
+    x0_y1_z1 = (x0 + y1 * padded_w + z1 * padded_w * padded_h).unsqueeze(1).expand(-1, c, -1)
+    x1_y0_z1 = (x1 + y0 * padded_w + z1 * padded_w * padded_h).unsqueeze(1).expand(-1, c, -1)
+    x1_y1_z1 = (x1 + y1 * padded_w + z1 * padded_w * padded_h).unsqueeze(1).expand(-1, c, -1)
+
+    Ia = torch.gather(im_padded, 2, x0_y0_z0)
+    Ib = torch.gather(im_padded, 2, x0_y1_z0)
+    Ic = torch.gather(im_padded, 2, x1_y0_z0)
+    Id = torch.gather(im_padded, 2, x1_y1_z0)
+    Ie = torch.gather(im_padded, 2, x0_y0_z1)
+    If_ = torch.gather(im_padded, 2, x0_y1_z1)
+    Ig = torch.gather(im_padded, 2, x1_y0_z1)
+    Ih = torch.gather(im_padded, 2, x1_y1_z1)
+
+    return (Ia * wa + Ib * wb + Ic * wc + Id * wd + Ie * we + If_ * wf + Ig * wg + Ih * wh).reshape(n, c, gd, gh, gw)
+
+#SPM
+
+def custom_nearest_grid_sample(im, grid, align_corners=False):
+    n, c, d, h, w = im.shape
+
+    gn, gd, gh, gw, _ = grid.shape
+
+    assert n == gn
+
+    x = grid[:, :, :, :, 0]
+    y = grid[:, :, :, :, 1]
+    z = grid[:, :, :, :, 2]
+
+    if align_corners:
+        x = ((x + 1) / 2) * (w - 1)
+        y = ((y + 1) / 2) * (h - 1)
+        z = ((z + 1) / 2) * (d - 1)
+    else:
+        x = ((x + 1) * w - 1) / 2
+        y = ((y + 1) * h - 1) / 2
+        z = ((z + 1) * d - 1) / 2
+
+    x = torch.round(x).long()
+    y = torch.round(y).long()
+    z = torch.round(z).long()
+
+    # Clip coordinates to image size
+    x = torch.clamp(x, 0, w - 1)
+    y = torch.clamp(y, 0, h - 1)
+    z = torch.clamp(z, 0, d - 1)
+    #print("im.shape", im[:, :, z, y, x].shape)
+    return im[:, :, z, y, x][0]
+
+
+class CustomCenter_of_mass_initial_pairwise(nn.Module):
+    def __init__(self):
+        super(CustomCenter_of_mass_initial_pairwise, self).__init__()
+        self.id = torch.zeros((1, 3, 4)).cuda()
+        self.id[0, 0, 0] = 1
+        self.id[0, 1, 1] = 1
+        self.id[0, 2, 2] = 1
+
+        self.to_center_matrix = torch.zeros((1, 3, 4)).cuda()
+        self.to_center_matrix[0, 0, 0] = 1
+        self.to_center_matrix[0, 1, 1] = 1
+        self.to_center_matrix[0, 2, 2] = 1
+    
+    def forward(self, x, y):
+        # center of mass of x -> center of mass of y
+        id_grid = F.affine_grid(self.id, x.shape, align_corners=True)
+        # mask = (x > 0).float()
+        # mask_sum = torch.sum(mask)
+        x_sum = torch.sum(x)
+        x_center_mass_x = torch.sum(x.permute(0, 2, 3, 4, 1)[..., 0] * id_grid[..., 0])/x_sum
+        x_center_mass_y = torch.sum(x.permute(0, 2, 3, 4, 1)[..., 0] * id_grid[..., 1])/x_sum
+        x_center_mass_z = torch.sum(x.permute(0, 2, 3, 4, 1)[..., 0] * id_grid[..., 2])/x_sum
+
+        y_sum = torch.sum(y)
+        y_center_mass_x = torch.sum(y.permute(0, 2, 3, 4, 1)[..., 0] * id_grid[..., 0]) / y_sum
+        y_center_mass_y = torch.sum(y.permute(0, 2, 3, 4, 1)[..., 0] * id_grid[..., 1]) / y_sum
+        y_center_mass_z = torch.sum(y.permute(0, 2, 3, 4, 1)[..., 0] * id_grid[..., 2]) / y_sum
+
+        self.to_center_matrix[0, 0, 3] = x_center_mass_x - y_center_mass_x
+        self.to_center_matrix[0, 1, 3] = x_center_mass_y - y_center_mass_y
+        self.to_center_matrix[0, 2, 3] = x_center_mass_z - y_center_mass_z
+
+        grid = F.affine_grid(self.to_center_matrix, x.shape, align_corners=True)
+        transformed_image = custom_grid_sample(x, grid, align_corners=True)
+        #transformed_image = F.grid_sample(x, grid, align_corners=True)
 
         # print(affine_para)
         # print(output_affine_m[0:3])

@@ -7,7 +7,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from C2FViT_model import C2F_ViT_stage, AffineCOMTransform, Center_of_mass_initial_pairwise
+from C2FViT_model import C2F_ViT_stage, AffineCOMTransform, CustomAffineCOMTransform, Center_of_mass_initial_pairwise, CustomCenter_of_mass_initial_pairwise
 from Functions import save_img, load_4D, min_max_norm, pad_to_shape, crop_image, update_affine, reorient_image
 from tqdm import tqdm
 
@@ -72,8 +72,8 @@ if __name__ == '__main__':
     model.load_state_dict(torch.load(opt.modelpath))
     model.eval()
 
-    affine_transform = AffineCOMTransform().cuda()
-    init_center = Center_of_mass_initial_pairwise()
+    affine_transform = CustomAffineCOMTransform().cuda()
+    init_center = CustomCenter_of_mass_initial_pairwise()
 
     fixed_base = os.path.basename(fixed_path)
     fixed_img_nii = nib.load(fixed_path)
