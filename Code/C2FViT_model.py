@@ -222,6 +222,7 @@ class C2F_ViT_stage(nn.Module):
 
         self.avg_pool = nn.AvgPool3d(2, 2)
         self.affine_transform = AffineCOMTransform()
+        #self.affine_transform = CustomAffineCOMTransform()
 
         self.apply(self._init_weights)
 

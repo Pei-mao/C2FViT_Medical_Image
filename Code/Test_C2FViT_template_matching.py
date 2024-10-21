@@ -72,8 +72,10 @@ if __name__ == '__main__':
     model.load_state_dict(torch.load(opt.modelpath))
     model.eval()
 
-    affine_transform = CustomAffineCOMTransform().cuda()
-    init_center = CustomCenter_of_mass_initial_pairwise()
+    affine_transform = AffineCOMTransform().cuda()
+    #affine_transform = CustomAffineCOMTransform().cuda()
+    init_center = Center_of_mass_initial_pairwise()
+    #init_center = CustomCenter_of_mass_initial_pairwise()
 
     fixed_base = os.path.basename(fixed_path)
     fixed_img_nii = nib.load(fixed_path)
