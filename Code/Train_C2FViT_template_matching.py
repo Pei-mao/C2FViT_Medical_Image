@@ -74,7 +74,7 @@ def train():
 
     lossall = np.zeros((2, iteration + 1))
 
-    training_generator = Data.DataLoader(Dataset_epoch_MNI152(imgs, labels, MNI152_img, MNI152_label, need_label=False, RAS=True),
+    training_generator = Data.DataLoader(Dataset_epoch_MNI152(imgs, labels, MNI152_img, MNI152_label, need_label=False, RAS=RAS),
                                          batch_size=1,
                                          shuffle=True, num_workers=4)
     step = 0
@@ -141,7 +141,7 @@ def train():
                     #MNI152_label = "../Data/MNI-maxprob-thr50-1mm_pad_RSP_oasis.nii.gz"
                     MNI152_label = "../Data/MNI152_T1_1mm_brain_pad_RSP_aseg.nii.gz"
                 
-                valid_generator = Data.DataLoader(Dataset_epoch_MNI152(imgs, labels, MNI152_img, MNI152_label, need_label=True, RAS=True),
+                valid_generator = Data.DataLoader(Dataset_epoch_MNI152(imgs, labels, MNI152_img, MNI152_label, need_label=True, RAS=RAS),
                                                   batch_size=1,
                                                   shuffle=False, num_workers=2)
                 

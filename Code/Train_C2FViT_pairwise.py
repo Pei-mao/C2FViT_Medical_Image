@@ -51,8 +51,11 @@ def train():
     loss_similarity = multi_resolution_NCC(win=7, scale=3)
 
     # OASIS
-    imgs = sorted(glob.glob(datapath + "/OASIS_OAS1_*_MR1/norm.nii.gz"))
-    labels = sorted(glob.glob(datapath + "/OASIS_OAS1_*_MR1/seg35.nii.gz"))
+    #imgs = sorted(glob.glob(datapath + "/OASIS_OAS1_*_MR1/norm.nii.gz"))
+    #labels = sorted(glob.glob(datapath + "/OASIS_OAS1_*_MR1/seg35.nii.gz"))
+    # tigerdatav3
+    imgs = sorted(glob.glob(datapath + "/tigerdata_raw_train/*.nii.gz"))
+    labels = sorted(glob.glob(datapath + "/tigerdata_raw_train_aseg/*.nii.gz"))
 
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     # optimizer = torch.optim.SGD(model.parameters(), lr=lr, momentum=0.9)
@@ -63,7 +66,7 @@ def train():
 
     lossall = np.zeros((2, iteration + 1))
 
-    training_generator = Data.DataLoader(Dataset_epoch(imgs, labels, norm=True, use_label=False),
+    training_generator = Data.DataLoader(Dataset_epoch(imgs, labels, norm=True, use_label=False, RAS=True),
                                          batch_size=1,
                                          shuffle=True, num_workers=4)
     step = 0
@@ -116,56 +119,60 @@ def train():
                 # Put your validation code here
                 # ---------------------------------------
 
-                # imgs = sorted(glob.glob(datapath + "/OASIS_OAS1_*_MR1/norm.nii.gz"))[255:259]
-                # labels = sorted(glob.glob(datapath + "/OASIS_OAS1_*_MR1/seg35.nii.gz"))[255:259]
-                #
-                # valid_generator = Data.DataLoader(
-                #     Dataset_epoch(imgs, labels, norm=True, use_label=True),
-                #     batch_size=1,
-                #     shuffle=False, num_workers=2)
-                #
-                # use_cuda = True
-                # device = torch.device("cuda" if use_cuda else "cpu")
-                # dice_total = []
-                # brain_dice_total = []
-                # print("\nValiding...")
-                # for batch_idx, data in enumerate(valid_generator):
-                #     X, Y, X_label, Y_label = data[0].to(device), data[1].to(device), data[2].to(
-                #         device), data[3].to(device)
-                #
-                #     with torch.no_grad():
-                #         if com_initial:
-                #             X, init_flow = init_center(X, Y)
-                #             X_label = F.grid_sample(X_label, init_flow, mode="nearest", align_corners=True)
-                #
-                #         X_down = F.interpolate(X, scale_factor=0.5, mode="trilinear", align_corners=True)
-                #         Y_down = F.interpolate(Y, scale_factor=0.5, mode="trilinear", align_corners=True)
-                #
-                #         warpped_x_list, y_list, affine_para_list = model(X_down, Y_down)
-                #         X_Y, affine_matrix = affine_transform(X, affine_para_list[-1])
-                #         F_X_Y = F.affine_grid(affine_matrix, X_label.shape, align_corners=True)
-                #
-                #         X_Y_label = F.grid_sample(X_label, F_X_Y, mode="nearest", align_corners=True).cpu().numpy()[0,
-                #                     0, :, :, :]
-                #         X_brain_label = (X_Y > 0).float().cpu().numpy()[0, 0, :, :, :]
-                #
-                #         # brain mask
-                #         Y_brain_label = (Y > 0).float().cpu().numpy()[0, 0, :, :, :]
-                #         Y_label = Y_label.data.cpu().numpy()[0, 0, :, :, :]
-                #
-                #         dice_score = dice(np.floor(X_Y_label), np.floor(Y_label))
-                #         dice_total.append(dice_score)
-                #
-                #         brain_dice = dice(np.floor(X_brain_label), np.floor(Y_brain_label))
-                #         brain_dice_total.append(brain_dice)
-                #
-                # dice_total = np.array(dice_total)
-                # brain_dice_total = np.array(brain_dice_total)
-                # print("Dice mean: ", dice_total.mean())
-                # print("Brain Dice mean: ", brain_dice_total.mean())
-                #
-                # with open(log_dir, "a") as log:
-                #     log.write(f"{step}: {dice_total.mean()}, {brain_dice_total.mean()} \n")
+                # OASIS
+                #imgs = sorted(glob.glob(datapath + "/OASIS_OAS1_*_MR1/norm.nii.gz"))[255:259]
+                #labels = sorted(glob.glob(datapath + "/OASIS_OAS1_*_MR1/seg35.nii.gz"))[255:259]
+                # tigerdatav3
+                imgs = sorted(glob.glob(datapath + "/tigerdata_raw_val/*.nii.gz"))
+                labels = sorted(glob.glob(datapath + "/tigerdata_raw_val_aseg/*.nii.gz"))
+                
+                valid_generator = Data.DataLoader(
+                    Dataset_epoch(imgs, labels, norm=True, use_label=True, RAS=True),
+                    batch_size=1,
+                    shuffle=False, num_workers=2)
+                
+                use_cuda = True
+                device = torch.device("cuda" if use_cuda else "cpu")
+                dice_total = []
+                brain_dice_total = []
+                print("\nValiding...")
+                for batch_idx, data in enumerate(valid_generator):
+                    X, Y, X_label, Y_label = data[0].to(device), data[1].to(device), data[2].to(
+                        device), data[3].to(device)
+                
+                    with torch.no_grad():
+                        if com_initial:
+                            X, init_flow = init_center(X, Y)
+                            X_label = F.grid_sample(X_label, init_flow, mode="nearest", align_corners=True)
+                
+                        X_down = F.interpolate(X, scale_factor=0.5, mode="trilinear", align_corners=True)
+                        Y_down = F.interpolate(Y, scale_factor=0.5, mode="trilinear", align_corners=True)
+                
+                        warpped_x_list, y_list, affine_para_list = model(X_down, Y_down)
+                        X_Y, affine_matrix = affine_transform(X, affine_para_list[-1])
+                        F_X_Y = F.affine_grid(affine_matrix, X_label.shape, align_corners=True)
+                
+                        X_Y_label = F.grid_sample(X_label, F_X_Y, mode="nearest", align_corners=True).cpu().numpy()[0,
+                                    0, :, :, :]
+                        X_brain_label = (X_Y > 0).float().cpu().numpy()[0, 0, :, :, :]
+                
+                        # brain mask
+                        Y_brain_label = (Y > 0).float().cpu().numpy()[0, 0, :, :, :]
+                        Y_label = Y_label.data.cpu().numpy()[0, 0, :, :, :]
+                
+                        dice_score = dice(np.floor(X_Y_label), np.floor(Y_label))
+                        dice_total.append(dice_score)
+                
+                        brain_dice = dice(np.floor(X_brain_label), np.floor(Y_brain_label))
+                        brain_dice_total.append(brain_dice)
+                
+                dice_total = np.array(dice_total)
+                brain_dice_total = np.array(brain_dice_total)
+                print("Dice mean: ", dice_total.mean())
+                print("Brain Dice mean: ", brain_dice_total.mean())
+                
+                with open(log_dir, "a") as log:
+                    log.write(f"{step}: {dice_total.mean()}, {brain_dice_total.mean()} \n")
 
             step += 1
 

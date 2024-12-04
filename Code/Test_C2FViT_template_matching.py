@@ -10,7 +10,7 @@ import torch.nn.functional as F
 from C2FViT_model import C2F_ViT_stage, AffineCOMTransform, CustomAffineCOMTransform, Center_of_mass_initial_pairwise, CustomCenter_of_mass_initial_pairwise
 from Functions import save_img, load_4D, min_max_norm, pad_to_shape, crop_image, update_affine, reorient_image
 from tqdm import tqdm
-
+import time
 
 if __name__ == '__main__':
     parser = ArgumentParser()
@@ -102,7 +102,7 @@ if __name__ == '__main__':
          
         moving_img = min_max_norm(moving_img)
         moving_img = torch.from_numpy(moving_img).float().to(device).unsqueeze(dim=0)
-
+        #start_time = time.time()
         with torch.no_grad():
             if com_initial:
                 moving_img, init_flow = init_center(moving_img, fixed_img)
@@ -121,12 +121,14 @@ if __name__ == '__main__':
             X_Y, affine_matrix = affine_transform(moving_img, affine_para_list[-1])
             
             X_Y_cpu = X_Y.data.cpu().numpy()[0, 0, :, :, :]
-            
+            #end_time = time.time()  # 結束計時
+            #elapsed_time = end_time - start_time  # 計算經過的時間
+            #print(elapsed_time)
             if Eval:
                 #ABIDE_50
-                moving_seg = load_4D(moving_img_path.replace("ABIDE_NoAffine", "ABIDE_aseg").replace("_tbet.nii.gz", "_aseg.nii.gz"), RAS)
+                #moving_seg = load_4D(moving_img_path.replace("ABIDE_NoAffine", "ABIDE_aseg").replace("_tbet.nii.gz", "_aseg.nii.gz"), RAS)
                 #CC359_60
-                #moving_seg = load_4D(moving_img_path.replace("CC359_60", "CC359_60_aseg").replace(".nii.gz", "_aseg.nii.gz"), RAS)
+                moving_seg = load_4D(moving_img_path.replace("CC359_60", "CC359_60_aseg").replace(".nii.gz", "_aseg.nii.gz"), RAS)
                 #VBM
                 #moving_seg = load_4D(moving_img_path.replace("raw", "GM").replace(".nii.gz", "_cgw_pve1.nii.gz"), RAS)
                 

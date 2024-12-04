@@ -122,7 +122,7 @@ def save_flow(I_img, savename, header=None, affine=None):
 
 class Dataset_epoch(Data.Dataset):
     'Characterizes a dataset for PyTorch'
-    def __init__(self, names, labels, norm=True, use_label=False):
+    def __init__(self, names, labels, norm=True, use_label=False, RAS=True):
         'Initialization'
         self.names = names
         self.labels = labels
@@ -130,6 +130,7 @@ class Dataset_epoch(Data.Dataset):
         self.index_pair = list(itertools.permutations(names, 2))
         self.index_pair_label = list(itertools.permutations(labels, 2))
         self.use_label = use_label
+        self.RAS = RAS
 
     def __len__(self):
         'Denotes the total number of samples'
@@ -138,11 +139,11 @@ class Dataset_epoch(Data.Dataset):
     def __getitem__(self, step):
         'Generates one sample of data'
         # Select sample
-        img_A = load_4D(self.index_pair[step][0])
-        img_B = load_4D(self.index_pair[step][1])
+        img_A = load_4D(self.index_pair[step][0], self.RAS)
+        img_B = load_4D(self.index_pair[step][1], self.RAS)
 
-        img_A_label = load_4D(self.index_pair_label[step][0])
-        img_B_label = load_4D(self.index_pair_label[step][1])
+        img_A_label = load_4D(self.index_pair_label[step][0], self.RAS)
+        img_B_label = load_4D(self.index_pair_label[step][1], self.RAS)
 
         if self.norm:
             img_A = min_max_norm(img_A)
@@ -166,7 +167,7 @@ class Dataset_epoch_MNI152(Data.Dataset):
         self.need_label = need_label
         self.fixed_img = fixed_img
         self.fixed_label = fixed_label
-        self.RAS = True
+        self.RAS = RAS
 
     def __len__(self):
         'Denotes the total number of samples'
