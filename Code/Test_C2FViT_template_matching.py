@@ -11,6 +11,7 @@ from C2FViT_model import C2F_ViT_stage, AffineCOMTransform, CustomAffineCOMTrans
 from Functions import save_img, load_4D, min_max_norm, pad_to_shape, crop_image, update_affine, reorient_image
 from tqdm import tqdm
 import time
+import statistics
 
 if __name__ == '__main__':
     parser = ArgumentParser()
@@ -61,7 +62,7 @@ if __name__ == '__main__':
 
     use_cuda = True
     device = torch.device("cuda" if use_cuda else "cpu")
-
+    
     model = C2F_ViT_stage(img_size=128, patch_size=[3, 7, 15], stride=[2, 4, 8], num_classes=12,
                           embed_dims=[256, 256, 256],
                           num_heads=[2, 2, 2], mlp_ratios=[2, 2, 2], qkv_bias=False, qk_scale=None, drop_rate=0.,
@@ -95,21 +96,21 @@ if __name__ == '__main__':
 
     fixed_img = min_max_norm(fixed_img)
     fixed_img = torch.from_numpy(fixed_img).float().to(device).unsqueeze(dim=0)
-
+    #time_list = []
     def process_moving_image(moving_img_path, header, affine, Eval=False):
         moving_base = os.path.basename(moving_img_path)
         moving_img = load_4D(moving_img_path, RAS)
-         
+        
         moving_img = min_max_norm(moving_img)
         moving_img = torch.from_numpy(moving_img).float().to(device).unsqueeze(dim=0)
         #start_time = time.time()
         with torch.no_grad():
             if com_initial:
                 moving_img, init_flow = init_center(moving_img, fixed_img)
-    
+                
             X_down = F.interpolate(moving_img, scale_factor=0.5, mode="trilinear", align_corners=True)
             Y_down = F.interpolate(fixed_img, scale_factor=0.5, mode="trilinear", align_corners=True)
-    
+            
             warpped_x_list, y_list, affine_para_list = model(X_down, Y_down)
           #rigid
             #affine_para_list[-1][0, 11] = 0
@@ -124,6 +125,7 @@ if __name__ == '__main__':
             #end_time = time.time()  # 結束計時
             #elapsed_time = end_time - start_time  # 計算經過的時間
             #print(elapsed_time)
+            #time_list.append(elapsed_time)
             if Eval:
                 #ABIDE_50
                 #moving_seg = load_4D(moving_img_path.replace("ABIDE_NoAffine", "ABIDE_aseg").replace("_tbet.nii.gz", "_aseg.nii.gz"), RAS)
@@ -179,3 +181,5 @@ if __name__ == '__main__':
         process_moving_image(moving_path, fixed_header, fixed_affine, eval_flag)
         
     print("Result saved to :", savepath)
+    #print("平均時間: ", statistics.mean(time_list))
+    #print("標準差: ", statistics.stdev(time_list))
